@@ -54,10 +54,12 @@ impl CharKind {
 
 impl Poc {
     pub fn build<S: IntoIterator<Item = char>>(sentence: S) -> (String, Vec<Poc>) {
+        let mut curr = CharKind::Space;
         let mut result = sentence.into_iter().fold(
-            (String::new(), Vec::<Poc>::new(), CharKind::Space),
-            |(mut result, mut pocs, prev), ch| {
-                let curr = CharKind::find(ch);
+            (String::new(), Vec::<Poc>::new()),
+            move |(mut result, mut pocs), ch| {
+                let prev = curr;
+                curr = CharKind::find(ch);
                 let last = pocs.last_mut().into_iter();
                 match (prev, curr) {
                     (CharKind::MultiPunc, CharKind::MultiPunc) => {
@@ -84,7 +86,7 @@ impl Poc {
                         }
                     }
                 }
-                (result, pocs, curr)
+                (result, pocs)
             },
         );
         result.1.last_mut().into_iter().for_each(|x| *x &= Poc::ES);
