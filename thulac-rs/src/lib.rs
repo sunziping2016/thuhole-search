@@ -27,8 +27,7 @@ pub struct Thulac {
     model: Model,
     dat: Dat,
     t2s: Option<T2S>,
-    ns: Option<PostProcessor>,
-    idiom: Option<PostProcessor>,
+    posts: Vec<PostProcessor>,
 }
 
 pub struct Preprocess<'a> {
@@ -54,42 +53,26 @@ impl Thulac {
                     Err(e)
                 }
             })?;
-        let ns = File::open(path.join("ns.bin"))
-            .map(|mut x| Dat::load(&mut x))
-            .flatten()
-            .map(|x| Some(PostProcessor::new(x, "ns".into())))
-            .or_else(|e| {
-                if e.kind() == ErrorKind::NotFound {
-                    Ok(None)
-                } else {
-                    Err(e)
+        let mut posts = Vec::new();
+        for (name, tag) in [("ns.bin", "ns"), ("idiom.bin", "i")] {
+            match File::open(path.join(name)) {
+                Ok(mut file) => {
+                    posts.push(PostProcessor::new(Dat::load(&mut file)?, tag.into()));
                 }
-            })?;
-        let idiom = File::open(path.join("idiom.bin"))
-            .map(|mut x| Dat::load(&mut x))
-            .flatten()
-            .map(|x| Some(PostProcessor::new(x, "i".into())))
-            .or_else(|e| {
-                if e.kind() == ErrorKind::NotFound {
-                    Ok(None)
-                } else {
-                    Err(e)
-                }
-            })?;
-        eprintln!(
-            "loaded: t2s={} ns={} idiom={}",
-            t2s.is_some(),
-            ns.is_some(),
-            idiom.is_some()
-        );
+                Err(e) if e.kind() == ErrorKind::NotFound => (),
+                Err(e) => return Err(e),
+            }
+        }
         Ok(Self {
             label,
             model,
             dat,
             t2s,
-            ns,
-            idiom,
+            posts,
         })
+    }
+    pub fn add_postprocessor(&mut self, post: PostProcessor) {
+        self.posts.push(post);
     }
     pub fn preprocess<'a>(&self, raw: &'a str) -> Preprocess<'a> {
         let (input, pocs) = if let Some(t2s) = self.t2s.as_ref() {
@@ -143,11 +126,8 @@ impl Thulac {
         if raw_chars.offset() != raw.len() {
             words.push((raw_chars.offset()..raw.len(), "", "w"));
         }
-        if let Some(ns) = self.ns.as_ref() {
-            words = ns.adjust(words);
-        }
-        if let Some(idiom) = self.idiom.as_ref() {
-            words = idiom.adjust(words);
+        for post in self.posts.iter() {
+            words = post.adjust(words);
         }
         words
     }
